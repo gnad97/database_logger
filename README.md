@@ -90,19 +90,23 @@ Workflow [.github/workflows/release.yml](.github/workflows/release.yml) chạy t
 
 **Tạo release mới:**
 
-```bash
-# 1. Bump version trong package.json (vd: 1.0.0 -> 1.0.1) rồi commit
-git commit -am "release: v1.0.1"
+Sau khi code đã được commit và push lên `main`, làm theo các bước sau:
 
-# 2. Tag và push
-git tag v1.0.1
-git push origin main --tags
-```
+1. **Bump version** trong [package.json](package.json) (vd: `1.0.0` → `1.0.1`), commit và push như bình thường.
 
-Workflow sẽ tự động:
-1. Cài Node theo `.nvmrc` + `npm ci`.
-2. Chạy `npm run build` → tạo `.exe` trong `dist/`.
-3. Upload installer lên **GitHub Releases** của repo (https://github.com/gnad97/database_logger/releases).
+2. **Tag version tương ứng và push tag:**
+
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+
+3. **Đợi CI build** (~5-10 phút). Workflow sẽ tự động:
+   - Cài Node theo `.nvmrc` + `npm ci`.
+   - Chạy `npm run build` → tạo `.exe` trong `dist/`.
+   - Upload installer lên [GitHub Releases](https://github.com/gnad97/database_logger/releases).
+
+> ⚠️ **Lưu ý:** Push code lên `main` **không** tự động tạo release. Chỉ khi push tag dạng `v*` thì CI mới publish lên Releases. Tag và version trong `package.json` nên trùng nhau.
 
 **Build thử không tạo release:** vào tab Actions → chọn workflow "Release Windows Build" → "Run workflow" (manual dispatch). Installer sẽ nằm ở phần workflow artifacts (không lên Releases).
 
