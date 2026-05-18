@@ -67,6 +67,28 @@ const computeTabTitle = (dbType, info) => {
   return dbType || '';
 };
 
+const createEmptyTab = (id) => ({
+  id,
+  title: '',
+  dbType: null,
+  connectionInfo: null,
+  formState: { dbType: '', uri: '', host: '', port: '', username: '', password: '', database: '' },
+  dbList: [],
+  selectedDb: '',
+  loading: false,
+  error: '',
+  collections: [],
+  logs: [],
+  logError: '',
+  selectedOps: [],
+  selectedCols: [],
+  searchId: '',
+  paused: false,
+  pausedSnapshot: null,
+  logSeq: 0,
+  pausedAtSeq: 0,
+});
+
 const TabMongoSubscription = ({ tabId, dbType, connectionInfo, onLog, onError }) => {
   const uri = connectionInfo?.uri;
   const database = connectionInfo?.database;
@@ -86,29 +108,7 @@ const TabMongoSubscription = ({ tabId, dbType, connectionInfo, onLog, onError })
 };
 
 const App = () => {
-  const [tabs, setTabs] = useState([
-    {
-      id: 1,
-      title: '',
-      dbType: null,
-      connectionInfo: null,
-      formState: { dbType: '', uri: '', host: '', port: '', username: '', password: '', database: '' },
-      dbList: [],
-      selectedDb: '',
-      loading: false,
-      error: '',
-      collections: [],
-      logs: [],
-      logError: '',
-      selectedOps: [],
-      selectedCols: [],
-      searchId: '',
-      paused: false,
-      pausedSnapshot: null,
-      logSeq: 0,
-      pausedAtSeq: 0,
-    },
-  ]);
+  const [tabs, setTabs] = useState([createEmptyTab(1)]);
   const [activeTab, setActiveTab] = useState(0);
   const nextIdRef = useRef(2);
   const [openSettingManager, setOpenSettingManager] = useState(false);
@@ -178,37 +178,20 @@ const App = () => {
   }, []);
 
   const addTab = () => {
-    const newTab = {
-      id: nextIdRef.current++,
-      title: '',
-      dbType: null,
-      connectionInfo: null,
-      formState: { dbType: '', uri: '', host: '', port: '', username: '', password: '', database: '' },
-      dbList: [],
-      selectedDb: '',
-      loading: false,
-      error: '',
-      collections: [],
-      logs: [],
-      logError: '',
-      selectedOps: [],
-      selectedCols: [],
-      searchId: '',
-      paused: false,
-      pausedSnapshot: null,
-      logSeq: 0,
-      pausedAtSeq: 0,
-    };
+    const newTab = createEmptyTab(nextIdRef.current++);
     setTabs([...tabs, newTab]);
     setActiveTab(tabs.length);
   };
 
   const removeTab = (index) => {
+    if (tabs.length === 1) {
+      setTabs([createEmptyTab(nextIdRef.current++)]);
+      setActiveTab(0);
+      return;
+    }
     const newTabs = tabs.filter((_, i) => i !== index);
     setTabs(newTabs);
-    if (newTabs.length === 0) {
-      setActiveTab(0);
-    } else if (activeTab >= newTabs.length) {
+    if (activeTab >= newTabs.length) {
       setActiveTab(newTabs.length - 1);
     } else if (activeTab > index) {
       setActiveTab(activeTab - 1);

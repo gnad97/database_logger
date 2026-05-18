@@ -3,7 +3,7 @@
   "productName": "DatabaseLogger",
   "version": "1.0.0",
   "description": "Electron desktop app to view change logs from MongoDB, PostgreSQL, and MySQL databases.",
-  "author": "Merchize <dangth@merchize.co>",
+  "author": "Dang Tong Hai <gnad.dev97@gmail.com>",
   "main": "public/electron.js",
   "homepage": "./",
   "scripts": {
@@ -54,10 +54,11 @@
     "files": [
       "build/**/*",
       "public/electron.js",
-      "public/preload.js"
+      "public/preload.js",
+      "assets/**/*"
     ],
     "directories": {
-      "buildResources": "public",
+      "buildResources": "assets",
       "output": "dist"
     },
     "win": {
@@ -69,14 +70,17 @@
           ]
         }
       ],
-      "icon": "tequila-logo.ico"
+      "icon": "assets/256x256.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DatabaseLogger"
+      "shortcutName": "DatabaseLogger",
+      "installerIcon": "assets/256x256.ico",
+      "uninstallerIcon": "assets/256x256.ico",
+      "installerHeaderIcon": "assets/256x256.ico"
     }
   }
 }

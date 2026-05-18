@@ -68,7 +68,7 @@ function createWindow() {
     height: 800,
     minWidth: 1200,
     minHeight: 800,
-    icon: path.join(__dirname, "../tequila-logo.ico"),
+    icon: path.join(__dirname, "../assets/256x256.ico"),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -83,11 +83,21 @@ function createWindow() {
   }
   //   win.openDevTools();
   Menu.setApplicationMenu(null);
+
+  win.webContents.on("did-start-loading", () => {
+    teardownAllStreams();
+  });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(path.join(__dirname, "../assets/512x512.png"));
+  }
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
+  teardownAllStreams();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -266,19 +276,35 @@ function startMongoWatch({ uri, database, channel, sender }) {
   async function connect() {
     if (state.stopped) return;
     state.retryTimer = null;
+    let client;
+    let stream;
     try {
-      state.client = new MongoClient(sanitizeMongoUri(uri), { serverSelectionTimeoutMS: 5000 });
-      await state.client.connect();
-      const db = state.client.db(database);
+      client = new MongoClient(sanitizeMongoUri(uri), { serverSelectionTimeoutMS: 5000 });
+      state.client = client;
+      await client.connect();
+      if (state.stopped) {
+        try { await client.close(); } catch {}
+        state.client = null;
+        return;
+      }
+      const db = client.db(database);
       const options = { fullDocument: "updateLookup" };
       if (state.resumeToken) options.resumeAfter = state.resumeToken;
-      state.stream = db.watch([], options);
+      stream = db.watch([], options);
+      state.stream = stream;
+      if (state.stopped) {
+        try { await stream.close(); } catch {}
+        try { await client.close(); } catch {}
+        state.stream = null;
+        state.client = null;
+        return;
+      }
       state.backoffMs = INITIAL_BACKOFF_MS;
-      state.stream.on("change", (change) => {
+      stream.on("change", (change) => {
         state.resumeToken = change._id;
         safeSend(channel, serializeChangeEvent(change));
       });
-      state.stream.on("error", handleStreamError);
+      stream.on("error", handleStreamError);
     } catch (err) {
       safeSend(
         `${channel}-error`,
@@ -311,7 +337,7 @@ ipcMain.on("db-log-unsubscribe", (_event, { channel }) => {
   }
 });
 
-app.on("before-quit", async () => {
+async function teardownAllStreams() {
   const channels = Object.keys(mongoStreams);
   await Promise.all(
     channels.map(async (ch) => {
@@ -322,4 +348,6 @@ app.on("before-quit", async () => {
       } catch {}
     })
   );
-});
+}
+
+app.on("before-quit", teardownAllStreams);
