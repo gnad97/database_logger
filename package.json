@@ -17,23 +17,23 @@
     "npm": "11.6.2"
   },
   "dependencies": {
+    "mongodb": "^3.7.3",
+    "mysql2": "^3.14.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^5.18.0",
     "@mui/material": "^5.18.0",
-    "mongodb": "^3.7.3",
-    "mysql2": "^3.14.2",
-    "pg": "^8.16.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "styled-components": "^6.1.19"
-  },
-  "devDependencies": {
     "concurrently": "^8.0.0",
     "cross-env": "^7.0.3",
     "electron": "^30.0.0",
     "electron-builder": "^24.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-scripts": "^5.0.1",
+    "styled-components": "^6.1.19",
     "wait-on": "^7.0.0"
   },
   "browserslist": {
@@ -51,12 +51,17 @@
   "build": {
     "appId": "com.merchize.databaselogger",
     "productName": "DatabaseLogger",
+    "asar": true,
+    "compression": "maximum",
+    "publish": null,
     "files": [
       "build/**/*",
       "public/electron.js",
       "public/preload.js",
-      "assets/**/*"
+      "assets/**/*",
+      "!**/*.map"
     ],
+    "electronLanguages": ["en-US", "vi"],
     "directories": {
       "buildResources": "assets",
       "output": "dist"
@@ -78,6 +83,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DatabaseLogger",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "differentialPackage": false,
       "installerIcon": "assets/256x256.ico",
       "uninstallerIcon": "assets/256x256.ico",
       "installerHeaderIcon": "assets/256x256.ico"
