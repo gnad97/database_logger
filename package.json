@@ -77,6 +77,43 @@
       ],
       "icon": "assets/256x256.ico"
     },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/512x512.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "identity": null
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "writeUpdateInfo": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/512x512.png",
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -85,6 +122,7 @@
       "shortcutName": "DatabaseLogger",
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "differentialPackage": false,
+      "deleteAppDataOnUninstall": true,
       "installerIcon": "assets/256x256.ico",
       "uninstallerIcon": "assets/256x256.ico",
       "installerHeaderIcon": "assets/256x256.ico"
