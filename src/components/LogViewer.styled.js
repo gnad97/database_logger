@@ -54,7 +54,6 @@ export const StickyTableContainer = styled.div`
   overflow-y: auto;
   width: 100%;
   box-sizing: border-box;
-  /* Đảm bảo TableHead sticky */
   table {
     border-collapse: separate;
     border-spacing: 0;
@@ -68,7 +67,7 @@ export const StickyTableContainer = styled.div`
     color: #f5f6fa;
     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
   }
-  /* Scrollbar chỉ hiện khi hover */
+  /* Scrollbar visible only on hover */
   &::-webkit-scrollbar {
     width: 10px;
     background: #2d3340;

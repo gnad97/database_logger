@@ -1,14 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, TextField, Button, MenuItem, Select, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, List, ListItem, ListItemButton, ListItemText, DialogActions, IconButton, Autocomplete, Alert, CircularProgress } from '@mui/material';
 import { FormContainer, ButtonRow } from './ConnectionForm.styled';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
-const LOCAL_KEY = 'db_log_viewer_settings';
-const getSavedSettings = () => {
+const loadSettingsFromMain = async () => {
   try {
-    const raw = localStorage.getItem(LOCAL_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const list = await window.api.loadSettings();
+    return Array.isArray(list) ? list : [];
   } catch {
     return [];
   }
@@ -22,7 +20,15 @@ const ConnectionForm = ({
   error, setError
 }) => {
   const [openLoad, setOpenLoad] = useState(false);
-  const [settings, setSettings] = useState(getSavedSettings());
+  const [settings, setSettings] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSettingsFromMain().then(list => {
+      if (!cancelled) setSettings(list);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = async () => {
     setError('');
@@ -31,33 +37,10 @@ const ConnectionForm = ({
     if (formState.dbType === 'mongodb' && formState.uri) {
       setLoading(true);
       try {
-        const { ipcRenderer } = window.require('electron');
-        const res = await ipcRenderer.invoke('db-connect', {
-          dbType: formState.dbType,
-          connectionInfo: { uri: formState.uri },
-        });
+        const res = await window.api.connect(formState.dbType, { uri: formState.uri });
         setLoading(false);
         if (res.success) {
           setDbList(res.databases);
-        } else {
-          setError(res.error || 'Connection failed');
-        }
-      } catch (e) {
-        setLoading(false);
-        setError('Connection failed');
-      }
-    } else if (['postgresql', 'sql'].includes(formState.dbType) && formState.host && formState.database) {
-      setLoading(true);
-      try {
-        const { ipcRenderer } = window.require('electron');
-        const res = await ipcRenderer.invoke('db-connect', {
-          dbType: formState.dbType,
-          connectionInfo: formState,
-        });
-        setLoading(false);
-        if (res.success) {
-          setDbList(res.databases);
-          onConnect(formState.dbType, formState);
         } else {
           setError(res.error || 'Connection failed');
         }
@@ -72,8 +55,9 @@ const ConnectionForm = ({
     onFormChange({ ...formState, [field]: e.target.value });
   };
 
-  const handleOpenLoad = () => {
-    setSettings(getSavedSettings());
+  const handleOpenLoad = async () => {
+    const list = await loadSettingsFromMain();
+    setSettings(list);
     setOpenLoad(true);
   };
   const handleCloseLoad = () => setOpenLoad(false);
@@ -84,7 +68,6 @@ const ConnectionForm = ({
   };
 
   const handleStartViewLog = () => {
-    // Gọi onConnect với dbType và connectionInfo đã chọn database
     let info = { ...formState };
     if (formState.dbType === 'mongodb') {
       info.uri = formState.uri;
@@ -122,8 +105,6 @@ const ConnectionForm = ({
           disabled={dbList.length > 0}
         >
           <MenuItem value="mongodb">MongoDB</MenuItem>
-          <MenuItem value="postgresql">PostgreSQL</MenuItem>
-          <MenuItem value="sql">SQL</MenuItem>
         </Select>
       </FormControl>
 

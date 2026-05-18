@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Tabs, Tab, IconButton, Tooltip, Box } from '@mui/material';
 import { Add as AddIcon, Close as CloseIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 import ConnectionForm from './components/ConnectionForm';
 import LogViewer from './components/LogViewer';
-import { AppContainer, StyledAppBar, StyledTabs, StyledTab, StyledIconButton, AddTabButton, GlobalScrollbarStyle } from './App.styled';
+import { AppContainer, StyledAppBar, StyledTabs, StyledTab, TabCloseButton, AddTabButton, GlobalScrollbarStyle } from './App.styled';
 import SettingManagerDialog from './components/SettingManagerDialog';
 
 const theme = createTheme({
@@ -47,12 +47,49 @@ const theme = createTheme({
 });
 
 const TIMEZONE_KEY = 'db_log_viewer_timezone_offset';
+const MAX_LOGS_KEY = 'db_log_viewer_max_logs';
+const DEFAULT_MAX_LOGS = 5000;
+const MIN_MAX_LOGS = 1;
+const MAX_MAX_LOGS = 100000;
+
+const clampMaxLogs = (n) => {
+  const v = Math.floor(Number(n));
+  if (!Number.isFinite(v)) return DEFAULT_MAX_LOGS;
+  return Math.max(MIN_MAX_LOGS, Math.min(MAX_MAX_LOGS, v));
+};
+
+const computeTabTitle = (dbType, info) => {
+  if (!info) return dbType || '';
+  if (info.settingName) {
+    return info.database ? `${info.settingName} - ${info.database}` : info.settingName;
+  }
+  if (info.database) return `${dbType} - ${info.database}`;
+  return dbType || '';
+};
+
+const TabMongoSubscription = ({ tabId, dbType, connectionInfo, onLog, onError }) => {
+  const uri = connectionInfo?.uri;
+  const database = connectionInfo?.database;
+  useEffect(() => {
+    if (dbType !== 'mongodb' || !uri || !database) return;
+    const channel = `db-log-event-${tabId}`;
+    window.api.watchLog(uri, database, channel);
+    const offLog = window.api.onLog(channel, log => onLog(tabId, log));
+    const offErr = window.api.onLogError(channel, msg => onError(tabId, msg));
+    return () => {
+      window.api.unsubscribeLog(channel);
+      offLog();
+      offErr();
+    };
+  }, [tabId, dbType, uri, database, onLog, onError]);
+  return null;
+};
 
 const App = () => {
   const [tabs, setTabs] = useState([
     {
       id: 1,
-      title: 'Tab 1',
+      title: '',
       dbType: null,
       connectionInfo: null,
       formState: { dbType: '', uri: '', host: '', port: '', username: '', password: '', database: '' },
@@ -63,14 +100,40 @@ const App = () => {
       collections: [],
       logs: [],
       logError: '',
+      selectedOps: [],
+      selectedCols: [],
+      searchId: '',
+      paused: false,
+      pausedSnapshot: null,
+      logSeq: 0,
+      pausedAtSeq: 0,
     },
   ]);
   const [activeTab, setActiveTab] = useState(0);
+  const nextIdRef = useRef(2);
   const [openSettingManager, setOpenSettingManager] = useState(false);
   const [timezoneOffset, setTimezoneOffset] = useState(() => {
     const raw = localStorage.getItem(TIMEZONE_KEY);
     return raw !== null ? Number(raw) : 0;
   });
+  const [maxLogs, setMaxLogs] = useState(() => {
+    const raw = localStorage.getItem(MAX_LOGS_KEY);
+    return raw !== null ? clampMaxLogs(raw) : DEFAULT_MAX_LOGS;
+  });
+  const maxLogsRef = useRef(maxLogs);
+  useEffect(() => { maxLogsRef.current = maxLogs; }, [maxLogs]);
+
+  useEffect(() => {
+    setTabs(prev => {
+      let changed = false;
+      const next = prev.map(t => {
+        if (!t.logs || t.logs.length <= maxLogs) return t;
+        changed = true;
+        return { ...t, logs: t.logs.slice(t.logs.length - maxLogs) };
+      });
+      return changed ? next : prev;
+    });
+  }, [maxLogs]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -88,49 +151,36 @@ const App = () => {
     };
   }, [tabs.length]);
 
-  useEffect(() => {
-    const unsubscribers = [];
-    tabs.forEach((tab, idx) => {
-      if (tab && tab.dbType === 'mongodb' && tab.connectionInfo && tab.connectionInfo.uri && tab.connectionInfo.database) {
-        const { ipcRenderer } = window.require('electron');
-        const channel = `db-log-event-${tab.id}`;
-        ipcRenderer.send('db-watch-log', { uri: tab.connectionInfo.uri, database: tab.connectionInfo.database, channel });
-        const onLog = (evt, log) => {
-          setTabs(tabs => {
-            const updated = [...tabs];
-            if (updated[idx]) {
-              updated[idx] = { ...updated[idx], logs: [...(updated[idx].logs || []), log] };
-            }
-            return updated;
-          });
-        };
-        const onError = (evt, errMsg) => {
-          setTabs(tabs => {
-            const updated = [...tabs];
-            if (updated[idx]) {
-              updated[idx] = { ...updated[idx], logError: errMsg };
-            }
-            return updated;
-          });
-        };
-        ipcRenderer.on(channel, onLog);
-        ipcRenderer.on(`${channel}-error`, onError);
-        unsubscribers.push(() => {
-          ipcRenderer.send('db-log-unsubscribe', { channel });
-          ipcRenderer.removeListener(channel, onLog);
-          ipcRenderer.removeListener(`${channel}-error`, onError);
-        });
-      }
+  const handleLog = useCallback((tabId, log) => {
+    setTabs(tabs => {
+      const idx = tabs.findIndex(t => t.id === tabId);
+      if (idx === -1) return tabs;
+      const cap = clampMaxLogs(maxLogsRef.current);
+      const prev = tabs[idx].logs || [];
+      const seq = (tabs[idx].logSeq || 0) + 1;
+      const annotated = { ...log, _uid: seq };
+      const overflow = prev.length + 1 - cap;
+      const nextLogs = overflow > 0 ? [...prev.slice(overflow), annotated] : [...prev, annotated];
+      const updated = [...tabs];
+      updated[idx] = { ...updated[idx], logs: nextLogs, logSeq: seq };
+      return updated;
     });
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [tabs.length, ...tabs.map(tab => tab.dbType === 'mongodb' ? `${tab.connectionInfo?.uri}-${tab.connectionInfo?.database}` : '')]);
+  }, []);
+
+  const handleError = useCallback((tabId, errMsg) => {
+    setTabs(tabs => {
+      const idx = tabs.findIndex(t => t.id === tabId);
+      if (idx === -1) return tabs;
+      const updated = [...tabs];
+      updated[idx] = { ...updated[idx], logError: errMsg };
+      return updated;
+    });
+  }, []);
 
   const addTab = () => {
     const newTab = {
-      id: tabs.length + 1,
-      title: `Tab ${tabs.length + 1}`,
+      id: nextIdRef.current++,
+      title: '',
       dbType: null,
       connectionInfo: null,
       formState: { dbType: '', uri: '', host: '', port: '', username: '', password: '', database: '' },
@@ -144,6 +194,10 @@ const App = () => {
       selectedOps: [],
       selectedCols: [],
       searchId: '',
+      paused: false,
+      pausedSnapshot: null,
+      logSeq: 0,
+      pausedAtSeq: 0,
     };
     setTabs([...tabs, newTab]);
     setActiveTab(tabs.length);
@@ -151,19 +205,10 @@ const App = () => {
 
   const removeTab = (index) => {
     const newTabs = tabs.filter((_, i) => i !== index);
-    const updatedTabs  = newTabs.map((tab, i) => {
-      const newId = i + 1;
-      const newTitle = tab.dbType
-        ? `${tab.dbType} - ${tab.connectionInfo.database || tab.connectionInfo.uri}`
-        : `Tab ${newId}`;
-      return {
-        ...tab,
-        id: newId,
-        title: newTitle,
-      };
-    });
-    setTabs(updatedTabs);
-    if (activeTab >= newTabs.length) {
+    setTabs(newTabs);
+    if (newTabs.length === 0) {
+      setActiveTab(0);
+    } else if (activeTab >= newTabs.length) {
       setActiveTab(newTabs.length - 1);
     } else if (activeTab > index) {
       setActiveTab(activeTab - 1);
@@ -171,40 +216,46 @@ const App = () => {
   };
 
   const handleConnect = async (index, dbType, connectionInfo) => {
-    const updatedTabs = [...tabs];
-    updatedTabs[index].dbType = dbType;
-    updatedTabs[index].connectionInfo = connectionInfo;
-    updatedTabs[index].title = `${dbType} - ${connectionInfo.database || connectionInfo.uri}`;
+    const tabId = tabs[index]?.id;
+    if (tabId == null) return;
+    let collections = [];
     if (dbType === 'mongodb' && connectionInfo.uri && connectionInfo.database) {
       try {
-        const { MongoClient } = window.require('mongodb');
-        const client = new MongoClient(connectionInfo.uri);
-        await client.connect();
-        const colls = await client.db(connectionInfo.database).listCollections().toArray();
-        updatedTabs[index].collections = colls.map(c => c.name);
-        await client.close();
+        const names = await window.api.listCollections(
+          connectionInfo.uri,
+          connectionInfo.database
+        );
+        collections = Array.isArray(names) ? names : [];
       } catch {
-        updatedTabs[index].collections = [];
+        collections = [];
       }
     }
-    updatedTabs[index].logs = [];
-    updatedTabs[index].logError = '';
-    updatedTabs[index].selectedOps = [];
-    updatedTabs[index].selectedCols = [];
-    updatedTabs[index].searchId = '';
-    if (dbType === 'postgresql' || dbType === 'sql') {
-      updatedTabs[index].dbList = [];
-      updatedTabs[index].loading = false;
-      updatedTabs[index].error = '';
-      updatedTabs[index].selectedDb = '';
-    }
-    setTabs(updatedTabs);
+    setTabs(prev => prev.map(t => t.id !== tabId ? t : {
+      ...t,
+      dbType,
+      connectionInfo,
+      title: computeTabTitle(dbType, connectionInfo),
+      collections,
+      logs: [],
+      logError: '',
+      selectedOps: [],
+      selectedCols: [],
+      searchId: '',
+      paused: false,
+      pausedSnapshot: null,
+      logSeq: 0,
+      pausedAtSeq: 0,
+      ...((dbType === 'postgresql' || dbType === 'sql') && {
+        dbList: [],
+        loading: false,
+        error: '',
+        selectedDb: '',
+      }),
+    }));
   };
 
   const updateFormState = (index, newFormState) => {
-    const updatedTabs = [...tabs];
-    updatedTabs[index].formState = newFormState;
-    setTabs(updatedTabs);
+    setTabs(prev => prev.map((t, i) => i === index ? { ...t, formState: newFormState } : t));
   };
 
   const updateTabState = (index, patch) => {
@@ -218,7 +269,28 @@ const App = () => {
   const clearTabLog = (tabIdx) => {
     setTabs(tabs => {
       const updated = [...tabs];
-      if (updated[tabIdx]) updated[tabIdx] = { ...updated[tabIdx], logs: [] };
+      if (updated[tabIdx]) updated[tabIdx] = {
+        ...updated[tabIdx],
+        logs: [],
+        paused: false,
+        pausedSnapshot: null,
+        logSeq: 0,
+        pausedAtSeq: 0,
+      };
+      return updated;
+    });
+  };
+
+  const togglePauseTab = (tabIdx) => {
+    setTabs(tabs => {
+      const updated = [...tabs];
+      const t = updated[tabIdx];
+      if (!t) return tabs;
+      if (t.paused) {
+        updated[tabIdx] = { ...t, paused: false, pausedSnapshot: null, pausedAtSeq: 0 };
+      } else {
+        updated[tabIdx] = { ...t, paused: true, pausedSnapshot: t.logs || [], pausedAtSeq: t.logSeq || 0 };
+      }
       return updated;
     });
   };
@@ -227,6 +299,16 @@ const App = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <GlobalScrollbarStyle />
+      {tabs.map(tab => (
+        <TabMongoSubscription
+          key={tab.id}
+          tabId={tab.id}
+          dbType={tab.dbType}
+          connectionInfo={tab.connectionInfo}
+          onLog={handleLog}
+          onError={handleError}
+        />
+      ))}
       <AppContainer>
         <StyledAppBar position="static" color="transparent" elevation={0}>
           <Box sx={{ display: 'flex', alignItems: 'center', height: 48 }}>
@@ -248,18 +330,19 @@ const App = () => {
                 <StyledTab
                   key={tab.id}
                   label={
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {tab.title}
-                      <StyledIconButton
-                        size="small"
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      {tab.title || `Tab ${index + 1}`}
+                      <TabCloseButton
+                        role="button"
+                        aria-label="Close tab"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeTab(index);
                         }}
                       >
                         <CloseIcon fontSize="small" />
-                      </StyledIconButton>
-                    </div>
+                      </TabCloseButton>
+                    </span>
                   }
                 />
               ))}
@@ -277,7 +360,6 @@ const App = () => {
                 dbType={tabs[activeTab].dbType}
                 collections={tabs[activeTab].collections}
                 logs={tabs[activeTab].logs}
-                setLogs={logs => updateTabState(activeTab, { logs })}
                 logError={tabs[activeTab].logError}
                 onClearLog={() => clearTabLog(activeTab)}
                 selectedOps={tabs[activeTab].selectedOps}
@@ -287,6 +369,10 @@ const App = () => {
                 searchId={tabs[activeTab].searchId}
                 setSearchId={searchId => updateTabState(activeTab, { searchId })}
                 timezoneOffset={timezoneOffset}
+                paused={tabs[activeTab].paused}
+                pausedSnapshot={tabs[activeTab].pausedSnapshot}
+                newSincePause={tabs[activeTab].paused ? Math.max(0, (tabs[activeTab].logSeq || 0) - (tabs[activeTab].pausedAtSeq || 0)) : 0}
+                onTogglePause={() => togglePauseTab(activeTab)}
               />
             ) : (
               <ConnectionForm
@@ -310,6 +396,12 @@ const App = () => {
           setTimezoneOffset={offset => {
             setTimezoneOffset(offset);
             localStorage.setItem(TIMEZONE_KEY, String(offset));
+          }}
+          maxLogs={maxLogs}
+          setMaxLogs={value => {
+            const next = clampMaxLogs(value);
+            setMaxLogs(next);
+            localStorage.setItem(MAX_LOGS_KEY, String(next));
           }}
         />
       </AppContainer>

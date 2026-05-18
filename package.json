@@ -1,11 +1,18 @@
 {
-  "name": "Tool view change database by DangTH from Merchize with love ❤️",
+  "name": "database-logger",
+  "productName": "DatabaseLogger",
   "version": "1.0.0",
   "main": "public/electron.js",
+  "homepage": "./",
   "scripts": {
+    "preinstall": "node scripts/check-install.js",
     "start": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "react-scripts build && electron-builder",
     "eject": "react-scripts eject"
+  },
+  "engines": {
+    "node": "20.20.2",
+    "npm": "11.6.2"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -38,5 +45,36 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "build": {
+    "appId": "com.merchize.databaselogger",
+    "productName": "DatabaseLogger",
+    "files": [
+      "build/**/*",
+      "public/electron.js",
+      "public/preload.js"
+    ],
+    "directories": {
+      "buildResources": "public",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "tequila-logo.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DatabaseLogger"
+    }
   }
 }

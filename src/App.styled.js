@@ -66,9 +66,17 @@ export const StyledTab = styled(Tab)`
   }
 `;
 
-export const StyledIconButton = styled(IconButton)`
+export const TabCloseButton = styled.span`
   margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   color: #bfc6d1;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
   &:hover {
     background: #42a5f5;
     color: #fff;
@@ -97,7 +105,7 @@ export const AddTabButton = styled(IconButton)`
 `;
 
 export const GlobalScrollbarStyle = createGlobalStyle`
-  /* Đảm bảo mọi popup Autocomplete đều có scrollbar dark mode */
+  /* Ensure Autocomplete popups use the dark-mode scrollbar */
   .MuiAutocomplete-popper .MuiPaper-root {
     scrollbar-color: #3a3f4b #23272f;
     scrollbar-width: thin;
