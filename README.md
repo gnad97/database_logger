@@ -102,7 +102,7 @@ git push origin main --tags
 Workflow sẽ tự động:
 1. Cài Node theo `.nvmrc` + `npm ci`.
 2. Chạy `npm run build` → tạo `.exe` trong `dist/`.
-3. Upload installer lên **GitHub Releases** của repo (https://github.com/gnad97/database-change-tracker/releases).
+3. Upload installer lên **GitHub Releases** của repo (https://github.com/gnad97/database_logger/releases).
 
 **Build thử không tạo release:** vào tab Actions → chọn workflow "Release Windows Build" → "Run workflow" (manual dispatch). Installer sẽ nằm ở phần workflow artifacts (không lên Releases).
 
